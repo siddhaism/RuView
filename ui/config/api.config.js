@@ -117,7 +117,7 @@ export function buildWsUrl(endpoint, params = {}) {
   // Use ws:// only for localhost development
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const isSecure = window.location.protocol === 'https:';
-  const protocol = (isSecure || !isLocalhost)
+  const protocol = isSecure
     ? API_CONFIG.WSS_PREFIX
     : API_CONFIG.WS_PREFIX;
 
