@@ -176,8 +176,10 @@
         setLoadingProgress(85, 'Connecting to server...');
 
         // 8. WebSocket client
+        const _vizWsProto = (window.location.protocol === 'https:') ? 'wss:' : 'ws:';
+        const _vizWsHost = window.location.host || 'localhost:3000';
         state.wsClient = new WebSocketClient({
-          url: 'ws://localhost:8000/ws/pose',
+          url: `${_vizWsProto}//${_vizWsHost}/ws/sensing`,
           onMessage: (msg) => handleWebSocketMessage(msg),
           onStateChange: (newState, oldState) => handleConnectionStateChange(newState, oldState),
           onError: (err) => console.error('[VIZ] WebSocket error:', err)
