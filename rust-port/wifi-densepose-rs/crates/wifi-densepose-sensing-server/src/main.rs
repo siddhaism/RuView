@@ -1727,12 +1727,14 @@ fn compute_person_score(feat: &FeatureInfo) -> f64 {
 /// Uses asymmetric thresholds: higher threshold to add a person, lower to remove.
 /// This prevents flickering at the boundary.
 fn score_to_person_count(smoothed_score: f64) -> usize {
-    // Thresholds chosen conservatively for single-ESP32 link:
-    //   score > 0.50 → 2 persons (needs sustained high variance + change points)
-    //   score > 0.80 → 3 persons (very high activity, rare with single link)
-    if smoothed_score > 0.80 {
+    // Thresholds tuned for single-ESP32 link:
+    //   score > 0.75 → 2 persons (needs sustained high variance + change points)
+    //   score > 0.90 → 3 persons (very high activity, rare with single link)
+    // Note: single-node setups produce high variance/motion from multipath,
+    // so thresholds are raised to avoid false multi-person detection.
+    if smoothed_score > 0.90 {
         3
-    } else if smoothed_score > 0.50 {
+    } else if smoothed_score > 0.75 {
         2
     } else {
         1
