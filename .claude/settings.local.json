@@ -1,11 +1,12 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(docker:*)",
+      "Bash(grep:*)"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "claude-flow"
-  ],
-  "permissions": {
-    "allow": [
-      "Bash(docker:*)"
-    ]
-  }
+  ]
 }

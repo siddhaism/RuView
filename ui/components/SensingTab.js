@@ -105,15 +105,12 @@ export class SensingTab {
             </div>
           </div>
 
-          <!-- Setup info -->
+          <!-- Connected Nodes -->
           <div class="sensing-card">
-            <div class="sensing-card-title">About This Data</div>
-            <p class="sensing-about-text">
-              Metrics are computed from WiFi Channel State Information (CSI).
-              With <strong>1 ESP32</strong> you get presence detection, breathing
-              estimation, and gross motion. Add <strong>3-4+ ESP32 nodes</strong>
-              around the room for spatial resolution and limb-level tracking.
-            </p>
+            <div class="sensing-card-title">Connected Nodes</div>
+            <div id="sensingNodes" class="sensing-nodes">
+              <div class="sensing-nodes-empty">No nodes detected</div>
+            </div>
           </div>
 
           <!-- Extra info -->
@@ -262,6 +259,54 @@ export class SensingTab {
 
     // Sparkline
     this._drawSparkline();
+
+    // Node panel
+    this._updateNodes(data.nodes || []);
+  }
+
+  _updateNodes(nodes) {
+    const container = this.container.querySelector('#sensingNodes');
+    if (!container) return;
+
+    if (!nodes.length) {
+      container.innerHTML = '<div class="sensing-nodes-empty">No nodes detected</div>';
+      return;
+    }
+
+    // Track per-node packet counts for rate calculation
+    if (!this._nodeStats) this._nodeStats = {};
+    const now = Date.now();
+
+    container.innerHTML = nodes.map(node => {
+      const id = node.node_id;
+      const rssi = (node.rssi_dbm || -80).toFixed(1);
+      const subs = node.subcarrier_count || node.amplitude?.length || 0;
+
+      // Calculate packet rate
+      if (!this._nodeStats[id]) this._nodeStats[id] = { count: 0, lastReset: now };
+      this._nodeStats[id].count++;
+      const elapsed = (now - this._nodeStats[id].lastReset) / 1000;
+      const rate = elapsed > 0 ? (this._nodeStats[id].count / elapsed).toFixed(1) : '0.0';
+      if (elapsed > 5) { this._nodeStats[id] = { count: 0, lastReset: now }; }
+
+      // RSSI signal quality
+      const rssiVal = parseFloat(rssi);
+      const quality = rssiVal > -50 ? 'strong' : rssiVal > -70 ? 'good' : rssiVal > -85 ? 'weak' : 'poor';
+
+      return `
+        <div class="sensing-node-item">
+          <div class="sensing-node-header">
+            <span class="sensing-node-dot ${quality}"></span>
+            <span class="sensing-node-id">Node ${id}</span>
+            <span class="sensing-node-badge">${quality}</span>
+          </div>
+          <div class="sensing-node-stats">
+            <div class="sensing-detail-row"><span>RSSI</span><span>${rssi} dBm</span></div>
+            <div class="sensing-detail-row"><span>Subcarriers</span><span>${subs}</span></div>
+            <div class="sensing-detail-row"><span>Rate</span><span>${rate} pkt/s</span></div>
+          </div>
+        </div>`;
+    }).join('');
   }
 
   _setText(id, text) {

@@ -122,10 +122,10 @@ def flash_node(port, build_dir, baud, esptool_cmd):
         "--chip", "esp32s3",
         "--port", port,
         "--baud", str(baud),
-        "write_flash", "--flash_mode", "dio", "--flash_size", "8MB",
+        "write-flash", "--flash-mode", "dio", "--flash-size", "16MB",
         "0x0", bootloader,
         "0x8000", partition_table,
-        "0x10000", app_bin,
+        "0x20000", app_bin,
     ], f"Flashing firmware to {port}")
 
 

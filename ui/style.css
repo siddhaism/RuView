@@ -2073,6 +2073,82 @@ canvas {
   font-weight: var(--font-weight-medium);
 }
 
+/* Connected Nodes panel */
+.sensing-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sensing-nodes-empty {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.sensing-node-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-card-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.sensing-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.sensing-node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sensing-node-dot.strong {
+  background: #00cc88;
+  box-shadow: 0 0 6px #00cc88;
+}
+
+.sensing-node-dot.good {
+  background: #32b8c6;
+  box-shadow: 0 0 6px #32b8c6;
+}
+
+.sensing-node-dot.weak {
+  background: var(--color-warning);
+  box-shadow: 0 0 4px var(--color-warning);
+}
+
+.sensing-node-dot.poor {
+  background: var(--color-error);
+  box-shadow: 0 0 4px var(--color-error);
+}
+
+.sensing-node-id {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+}
+
+.sensing-node-badge {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+}
+
+.sensing-node-stats .sensing-detail-row {
+  padding: 2px 0;
+  font-size: var(--font-size-xs);
+}
+
 /* ===== Training Tab Styles ===== */
 
 #training .tab-header {
