@@ -21,6 +21,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use std::collections::HashMap;
 
 use axum::{
     extract::{
@@ -223,6 +224,16 @@ struct NodeInfo {
     subcarrier_count: usize,
 }
 
+/// Tracks a node with its last-seen timestamp for stale eviction.
+#[derive(Debug, Clone)]
+struct TrackedNode {
+    info: NodeInfo,
+    last_seen: std::time::Instant,
+}
+
+/// Nodes not seen for this long are evicted from the registry.
+const NODE_STALE_SECS: u64 = 10;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FeatureInfo {
     mean_rssi: f64,
@@ -360,6 +371,8 @@ struct AppStateInner {
     // ── Adaptive classifier (environment-tuned) ──────────────────────────
     /// Trained adaptive model (loaded from data/adaptive_model.json or trained at runtime).
     adaptive_model: Option<adaptive_classifier::AdaptiveModel>,
+    /// Registry of recently-seen ESP32 nodes (node_id -> latest info + last seen time).
+    node_registry: HashMap<u8, TrackedNode>,
 }
 
 /// Number of frames retained in `frame_history` for temporal analysis.
@@ -2840,13 +2853,28 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                         timestamp: chrono::Utc::now().timestamp_millis() as f64 / 1000.0,
                         source: "esp32".to_string(),
                         tick,
-                        nodes: vec![NodeInfo {
-                            node_id: frame.node_id,
-                            rssi_dbm: features.mean_rssi,
-                            position: [2.0, 0.0, 1.5],
-                            amplitude: frame.amplitudes.iter().take(56).cloned().collect(),
-                            subcarrier_count: frame.n_subcarriers as usize,
-                        }],
+                        nodes: {
+                            // Update node registry with current frame
+                            let current_node = NodeInfo {
+                                node_id: frame.node_id,
+                                rssi_dbm: features.mean_rssi,
+                                position: [2.0, 0.0, 1.5],
+                                amplitude: frame.amplitudes.iter().take(56).cloned().collect(),
+                                subcarrier_count: frame.n_subcarriers as usize,
+                            };
+                            s.node_registry.insert(frame.node_id, TrackedNode {
+                                info: current_node,
+                                last_seen: std::time::Instant::now(),
+                            });
+                            // Evict stale nodes and collect all active ones
+                            let cutoff = std::time::Instant::now() - Duration::from_secs(NODE_STALE_SECS);
+                            s.node_registry.retain(|_, v| v.last_seen > cutoff);
+                            let mut nodes: Vec<NodeInfo> = s.node_registry.values()
+                                .map(|tn| tn.info.clone())
+                                .collect();
+                            nodes.sort_by_key(|n| n.node_id);
+                            nodes
+                        },
                         features: features.clone(),
                         classification,
                         signal_field: generate_signal_field(
@@ -3610,6 +3638,7 @@ async fn main() {
                   m.trained_frames, m.training_accuracy * 100.0);
             m
         }),
+        node_registry: HashMap::new(),
     }));
 
     // Start background tasks based on source
