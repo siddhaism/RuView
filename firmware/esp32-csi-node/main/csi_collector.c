@@ -14,6 +14,7 @@
 #include "csi_collector.h"
 #include "stream_sender.h"
 #include "edge_processing.h"
+#include "nvs_config.h"
 
 #include <string.h>
 #include "esp_log.h"
@@ -103,8 +104,9 @@ size_t csi_serialize_frame(const wifi_csi_info_t *info, uint8_t *buf, size_t buf
     uint32_t magic = CSI_MAGIC;
     memcpy(&buf[0], &magic, 4);
 
-    /* Node ID */
-    buf[4] = (uint8_t)CONFIG_CSI_NODE_ID;
+    /* Node ID — use NVS-provisioned value so each board sends its own ID */
+    extern nvs_config_t g_nvs_config;
+    buf[4] = g_nvs_config.node_id;
 
     /* Number of antennas */
     buf[5] = n_antennas;
@@ -221,7 +223,7 @@ void csi_collector_init(void)
     ESP_ERROR_CHECK(esp_wifi_set_csi(true));
 
     ESP_LOGI(TAG, "CSI collection initialized (node_id=%d, channel=%d)",
-             CONFIG_CSI_NODE_ID, CONFIG_CSI_WIFI_CHANNEL);
+             g_nvs_config.node_id, CONFIG_CSI_WIFI_CHANNEL);
 }
 
 /* ---- ADR-029: Channel hopping ---- */
