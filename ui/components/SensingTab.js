@@ -293,6 +293,9 @@ export class SensingTab {
       const rssiVal = parseFloat(rssi);
       const quality = rssiVal > -50 ? 'strong' : rssiVal > -70 ? 'good' : rssiVal > -85 ? 'weak' : 'poor';
 
+      const ip = node.ip || '--';
+      const ch = node.channel ? `Ch ${node.channel}` : '--';
+
       return `
         <div class="sensing-node-item">
           <div class="sensing-node-header">
@@ -301,7 +304,9 @@ export class SensingTab {
             <span class="sensing-node-badge">${quality}</span>
           </div>
           <div class="sensing-node-stats">
+            <div class="sensing-detail-row"><span>IP</span><span>${ip}</span></div>
             <div class="sensing-detail-row"><span>RSSI</span><span>${rssi} dBm</span></div>
+            <div class="sensing-detail-row"><span>Channel</span><span>${ch}</span></div>
             <div class="sensing-detail-row"><span>Subcarriers</span><span>${subs}</span></div>
             <div class="sensing-detail-row"><span>Rate</span><span>${rate} pkt/s</span></div>
           </div>

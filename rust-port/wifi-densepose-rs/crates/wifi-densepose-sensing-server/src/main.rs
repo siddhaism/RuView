@@ -222,6 +222,10 @@ struct NodeInfo {
     position: [f64; 3],
     amplitude: Vec<f64>,
     subcarrier_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channel: Option<u16>,
 }
 
 /// Tracks a node with its last-seen timestamp for stale eviction.
@@ -1280,6 +1284,8 @@ async fn windows_wifi_task(state: SharedState, tick_ms: u64) {
                 position: [0.0, 0.0, 0.0],
                 amplitude: multi_ap_frame.amplitudes,
                 subcarrier_count: obs_count,
+                ip: None,
+                channel: None,
             }],
             features,
             classification,
@@ -1410,6 +1416,8 @@ async fn windows_wifi_fallback_tick(state: &SharedState, seq: u32) {
             position: [0.0, 0.0, 0.0],
             amplitude: vec![signal_pct],
             subcarrier_count: 1,
+            ip: None,
+            channel: None,
         }],
         features,
         classification,
@@ -2861,6 +2869,8 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                                 position: [2.0, 0.0, 1.5],
                                 amplitude: frame.amplitudes.iter().take(56).cloned().collect(),
                                 subcarrier_count: frame.n_subcarriers as usize,
+                                ip: Some(src.ip().to_string()),
+                                channel: Some(frame.freq_mhz),
                             };
                             s.node_registry.insert(frame.node_id, TrackedNode {
                                 info: current_node,
@@ -2979,6 +2989,8 @@ async fn simulated_data_task(state: SharedState, tick_ms: u64) {
                 position: [2.0, 0.0, 1.5],
                 amplitude: frame_amplitudes,
                 subcarrier_count: frame_n_sub as usize,
+                ip: None,
+                channel: None,
             }],
             features: features.clone(),
             classification,
