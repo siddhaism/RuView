@@ -76,25 +76,43 @@ def generate_nvs_binary(csv_content, size):
     bin_path = csv_path.replace(".csv", ".bin")
 
     try:
-        # Try the pip-installed version first (esp_idf_nvs_partition_gen package)
+        # Method 1: Use subprocess to call the CLI tool (most reliable)
+        try:
+            subprocess.check_call([
+                sys.executable, "-m", "esp_idf_nvs_partition_gen",
+                "generate", csv_path, bin_path, hex(size),
+            ])
+            with open(bin_path, "rb") as f:
+                return f.read()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+        # Method 2: Try the pip-installed library with newer API
         try:
             from esp_idf_nvs_partition_gen import nvs_partition_gen
-            nvs_partition_gen.generate(csv_path, bin_path, size)
+            # Newer versions use generate(input, output, size, ...) with size as int or hex string
+            try:
+                nvs_partition_gen.generate(csv_path, bin_path, hex(size))
+            except TypeError:
+                nvs_partition_gen.generate(csv_path, bin_path, size)
             with open(bin_path, "rb") as f:
                 return f.read()
         except ImportError:
             pass
 
-        # Try legacy import name (older versions)
+        # Method 3: Try legacy import name (older versions)
         try:
             import nvs_partition_gen
-            nvs_partition_gen.generate(csv_path, bin_path, size)
+            try:
+                nvs_partition_gen.generate(csv_path, bin_path, hex(size))
+            except TypeError:
+                nvs_partition_gen.generate(csv_path, bin_path, size)
             with open(bin_path, "rb") as f:
                 return f.read()
         except ImportError:
             pass
 
-        # Fall back to calling the ESP-IDF script directly
+        # Method 4: Fall back to calling the ESP-IDF script directly
         idf_path = os.environ.get("IDF_PATH", "")
         gen_script = os.path.join(idf_path, "components", "nvs_flash",
                                   "nvs_partition_generator", "nvs_partition_gen.py")
@@ -106,7 +124,7 @@ def generate_nvs_binary(csv_content, size):
             with open(bin_path, "rb") as f:
                 return f.read()
 
-        # Last resort: try as a module
+        # Method 5: Last resort — try as a module
         subprocess.check_call([
             sys.executable, "-m", "nvs_partition_gen", "generate",
             csv_path, bin_path, hex(size)
