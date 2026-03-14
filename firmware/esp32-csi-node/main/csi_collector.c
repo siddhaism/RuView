@@ -222,8 +222,11 @@ void csi_collector_init(void)
     ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(wifi_csi_callback, NULL));
     ESP_ERROR_CHECK(esp_wifi_set_csi(true));
 
-    ESP_LOGI(TAG, "CSI collection initialized (node_id=%d, channel=%d)",
-             g_nvs_config.node_id, CONFIG_CSI_WIFI_CHANNEL);
+    {
+        extern nvs_config_t g_nvs_config;
+        ESP_LOGI(TAG, "CSI collection initialized (node_id=%d, channel=%d)",
+                 g_nvs_config.node_id, CONFIG_CSI_WIFI_CHANNEL);
+    }
 }
 
 /* ---- ADR-029: Channel hopping ---- */
