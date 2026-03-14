@@ -14,9 +14,62 @@ Usage:
 import argparse
 import glob
 import os
+import shutil
 import socket
 import subprocess
 import sys
+
+
+ESPTOOL_SEARCH_PATHS = [
+    os.path.expanduser("~/esptool"),
+    os.path.expanduser("~/.local/bin"),
+    "/usr/local/bin",
+]
+
+
+def find_esptool():
+    """Find the esptool executable or module."""
+    # 1. Try as a Python module
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "esptool", "version"],
+            capture_output=True, timeout=5,
+        )
+        return [sys.executable, "-m", "esptool"]
+    except Exception:
+        pass
+
+    # 2. Try esptool.py on PATH
+    esptool_path = shutil.which("esptool.py") or shutil.which("esptool")
+    if esptool_path:
+        return [esptool_path]
+
+    # 3. Search common directories
+    for search_dir in ESPTOOL_SEARCH_PATHS:
+        for name in ("esptool.py", "esptool"):
+            candidate = os.path.join(search_dir, name)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return [candidate]
+            if os.path.isfile(candidate):
+                return [sys.executable, candidate]
+
+    # 4. Search home directory recursively (shallow)
+    home = os.path.expanduser("~")
+    for dirpath, dirnames, filenames in os.walk(home):
+        # Don't recurse too deep
+        depth = dirpath.replace(home, "").count(os.sep)
+        if depth > 3:
+            dirnames.clear()
+            continue
+        if "esptool.py" in filenames:
+            candidate = os.path.join(dirpath, "esptool.py")
+            return [sys.executable, candidate]
+        if "esptool" in filenames:
+            candidate = os.path.join(dirpath, "esptool")
+            if os.access(candidate, os.X_OK):
+                return [candidate]
+
+    return None
 
 
 def get_local_ip():
@@ -53,7 +106,7 @@ def run_cmd(cmd, description):
     return True
 
 
-def flash_node(port, build_dir, baud):
+def flash_node(port, build_dir, baud, esptool_cmd):
     """Flash firmware to an ESP32-S3 via esptool."""
     bootloader = os.path.join(build_dir, "bootloader", "bootloader.bin")
     partition_table = os.path.join(build_dir, "partition_table", "partition-table.bin")
@@ -65,8 +118,7 @@ def flash_node(port, build_dir, baud):
             print("Run the Docker build first (Step 3).")
             return False
 
-    return run_cmd([
-        sys.executable, "-m", "esptool",
+    return run_cmd(esptool_cmd + [
         "--chip", "esp32s3",
         "--port", port,
         "--baud", str(baud),
@@ -131,6 +183,17 @@ def main():
         print(f"ERROR: provision.py not found at {provision_script}")
         sys.exit(1)
 
+    # Find esptool
+    esptool_cmd = None
+    if not args.skip_flash:
+        esptool_cmd = find_esptool()
+        if esptool_cmd is None:
+            print("ERROR: esptool not found.")
+            print("Install it:  pip install esptool")
+            print("Or specify its location in ESPTOOL_SEARCH_PATHS in this script.")
+            sys.exit(1)
+        print(f"Using esptool: {' '.join(esptool_cmd)}")
+
     # Auto-detect target IP
     target_ip = args.target_ip
     if target_ip is None:
@@ -186,7 +249,7 @@ def main():
 
         # Flash
         if not args.skip_flash:
-            if not flash_node(port, build_dir, args.baud):
+            if not flash_node(port, build_dir, args.baud, esptool_cmd):
                 print(f"\nFlash failed for Node {node_id}. Aborting.")
                 print("Tip: Hold the BOOT button on the ESP32 while this runs.")
                 sys.exit(1)
