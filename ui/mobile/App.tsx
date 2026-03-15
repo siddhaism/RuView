@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { apiService } from '@/services/api.service';
 import { rssiService } from '@/services/rssi.service';
 import { wsService } from '@/services/ws.service';
+import { notificationService } from '@/services/notification.service';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { usePoseStore } from './src/stores/poseStore';
 import { useSettingsStore } from './src/stores/settingsStore';
@@ -24,6 +25,14 @@ export default function App() {
       unsubscribe();
       wsService.disconnect();
     };
+  }, [serverUrl]);
+
+  useEffect(() => {
+    const setupNotifications = async () => {
+      await notificationService.initialize();
+      await notificationService.registerWithServer(serverUrl);
+    };
+    setupNotifications();
   }, [serverUrl]);
 
   useEffect(() => {

@@ -12,6 +12,7 @@ mod adaptive_classifier;
 mod rvf_container;
 mod rvf_pipeline;
 mod vital_signs;
+mod notifications;
 
 // Training pipeline modules (exposed via lib.rs)
 use wifi_densepose_sensing_server::{graph_transformer, trainer, dataset, embedding};
@@ -377,6 +378,8 @@ struct AppStateInner {
     adaptive_model: Option<adaptive_classifier::AdaptiveModel>,
     /// Registry of recently-seen ESP32 nodes (node_id -> latest info + last seen time).
     node_registry: HashMap<u8, TrackedNode>,
+    /// Push notification state for presence changes.
+    notification: notifications::NotificationState,
 }
 
 /// Number of frames retained in `frame_history` for temporal analysis.
@@ -1316,6 +1319,7 @@ async fn windows_wifi_task(state: SharedState, tick_ms: u64) {
             let _ = s.tx.send(json);
         }
         s.latest_update = Some(update);
+        notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
 
         debug!(
             "Multi-BSSID tick #{tick}: {obs_count} BSSIDs, quality={:.2}, verdict={:?}",
@@ -1447,6 +1451,7 @@ async fn windows_wifi_fallback_tick(state: &SharedState, seq: u32) {
         let _ = s.tx.send(json);
     }
     s.latest_update = Some(update);
+    notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
 }
 
 /// Probe if Windows WiFi is connected
@@ -2913,6 +2918,7 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                         let _ = s.tx.send(json);
                     }
                     s.latest_update = Some(update);
+                    notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
                 }
             }
             Err(e) => {
@@ -3034,6 +3040,7 @@ async fn simulated_data_task(state: SharedState, tick_ms: u64) {
             let _ = s.tx.send(json);
         }
         s.latest_update = Some(update);
+        notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
     }
 }
 
@@ -3055,6 +3062,40 @@ async fn broadcast_tick_task(state: SharedState, tick_ms: u64) {
             }
         }
     }
+}
+
+// ── Push notification endpoints ──────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct RegisterTokenRequest {
+    token: String,
+}
+
+async fn register_push_token(
+    State(state): State<SharedState>,
+    Json(body): Json<RegisterTokenRequest>,
+) -> impl IntoResponse {
+    let mut s = state.write().await;
+    if !s.notification.push_tokens.contains(&body.token) {
+        s.notification.push_tokens.push(body.token.clone());
+        info!("Registered push token: {}…", &body.token[..body.token.len().min(30)]);
+    }
+    Json(serde_json::json!({ "ok": true, "tokens": s.notification.push_tokens.len() }))
+}
+
+#[derive(Deserialize)]
+struct NotificationSettingsRequest {
+    enabled: bool,
+}
+
+async fn update_notification_settings(
+    State(state): State<SharedState>,
+    Json(body): Json<NotificationSettingsRequest>,
+) -> impl IntoResponse {
+    let mut s = state.write().await;
+    s.notification.enabled = body.enabled;
+    info!("Push notifications {}", if body.enabled { "enabled" } else { "disabled" });
+    Json(serde_json::json!({ "ok": true, "enabled": s.notification.enabled }))
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -3651,6 +3692,7 @@ async fn main() {
             m
         }),
         node_registry: HashMap::new(),
+        notification: notifications::NotificationState::new(),
     }));
 
     // Start background tasks based on source
@@ -3745,6 +3787,9 @@ async fn main() {
         .route("/api/v1/adaptive/train", post(adaptive_train))
         .route("/api/v1/adaptive/status", get(adaptive_status))
         .route("/api/v1/adaptive/unload", post(adaptive_unload))
+        // Push notification endpoints
+        .route("/api/v1/notifications/register", post(register_push_token))
+        .route("/api/v1/notifications/settings", post(update_notification_settings))
         // Static UI files
         .nest_service("/ui", ServeDir::new(&ui_path))
         .layer(SetResponseHeaderLayer::overriding(

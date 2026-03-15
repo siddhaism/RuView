@@ -8,7 +8,7 @@ import { WS_PATH } from '@/constants/websocket';
 import { apiService } from '@/services/api.service';
 import { wsService } from '@/services/ws.service';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { Alert, Pressable, Platform } from 'react-native';
+import { Alert, Pressable, Platform, Switch } from 'react-native';
 import { ThemePicker } from './ThemePicker';
 import { RssiToggle } from './RssiToggle';
 import { ServerUrlInput } from './ServerUrlInput';
@@ -87,6 +87,8 @@ export const SettingsScreen = () => {
   const setServerUrl = useSettingsStore((state) => state.setServerUrl);
   const setRssiScanEnabled = useSettingsStore((state) => state.setRssiScanEnabled);
   const setTheme = useSettingsStore((state) => state.setTheme);
+  const notificationsEnabled = useSettingsStore((state) => state.notificationsEnabled);
+  const setNotificationsEnabled = useSettingsStore((state) => state.setNotificationsEnabled);
 
   const [draftUrl, setDraftUrl] = useState(serverUrl);
   const [scanInterval, setScanInterval] = useState(2);
@@ -140,6 +142,23 @@ export const SettingsScreen = () => {
               iOS: RSSI scanning uses stubbed telemetry in this build.
             </ThemedText>
           )}
+        </GlowCard>
+
+        <GlowCard title="NOTIFICATIONS">
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <ThemedText preset="bodyMd">Push Notifications</ThemedText>
+              <ThemedText preset="bodySm" style={{ color: colors.textSecondary }}>
+                Alert when presence changes (person enters/leaves)
+              </ThemedText>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={setNotificationsEnabled}
+              trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+              thumbColor={colors.textPrimary}
+            />
+          </View>
         </GlowCard>
 
         <GlowCard title="APPEARANCE">
