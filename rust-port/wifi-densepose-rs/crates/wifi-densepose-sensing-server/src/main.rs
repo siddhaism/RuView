@@ -1319,7 +1319,8 @@ async fn windows_wifi_task(state: SharedState, tick_ms: u64) {
             let _ = s.tx.send(json);
         }
         s.latest_update = Some(update);
-        notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
+        let motion_lvl = s.current_motion_level.clone();
+        notifications::check_and_notify(&mut s.notification, est_persons, &motion_lvl).await;
 
         debug!(
             "Multi-BSSID tick #{tick}: {obs_count} BSSIDs, quality={:.2}, verdict={:?}",
@@ -1451,7 +1452,8 @@ async fn windows_wifi_fallback_tick(state: &SharedState, seq: u32) {
         let _ = s.tx.send(json);
     }
     s.latest_update = Some(update);
-    notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
+    let motion_lvl = s.current_motion_level.clone();
+    notifications::check_and_notify(&mut s.notification, est_persons, &motion_lvl).await;
 }
 
 /// Probe if Windows WiFi is connected
@@ -2918,7 +2920,8 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                         let _ = s.tx.send(json);
                     }
                     s.latest_update = Some(update);
-                    notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
+                    let motion_lvl = s.current_motion_level.clone();
+                    notifications::check_and_notify(&mut s.notification, est_persons, &motion_lvl).await;
                 }
             }
             Err(e) => {
@@ -3040,7 +3043,8 @@ async fn simulated_data_task(state: SharedState, tick_ms: u64) {
             let _ = s.tx.send(json);
         }
         s.latest_update = Some(update);
-        notifications::check_and_notify(&mut s.notification, est_persons, &s.current_motion_level).await;
+        let motion_lvl = s.current_motion_level.clone();
+        notifications::check_and_notify(&mut s.notification, est_persons, &motion_lvl).await;
     }
 }
 
