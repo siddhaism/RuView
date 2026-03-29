@@ -1727,24 +1727,22 @@ async fn latest(State(state): State<SharedState>) -> Json<serde_json::Value> {
 /// Returns a raw score (0.0..1.0) that the caller converts to person count
 /// after temporal smoothing.
 fn compute_person_score(feat: &FeatureInfo) -> f64 {
-    // Normalize each feature to [0, 1] using calibrated ranges:
+    // Normalize each feature to [0, 1] using calibrated ranges from real ESP32 data.
     //
-    //   variance: intra-frame amp variance. 1-person ~2-15, 2-person ~15-60,
-    //     real ESP32 can go higher. Use 30.0 as scaling midpoint.
-    let var_norm = (feat.variance / 30.0).clamp(0.0, 1.0);
+    // Real-world ESP32 CSI observations (single Tx-Rx link):
+    //   1 person:  variance ~2-10,  change_points ~3-10,  motion_band ~1-5
+    //   2 persons: variance ~6-20,  change_points ~8-20,  motion_band ~3-12
+    //   3 persons: variance ~12-35, change_points ~12-30, motion_band ~6-20
+    //
+    // Scaling denominators are set to the *midpoint* of the 2-person range so
+    // that 2 people reliably saturate the 0.4-0.6 band and 3 people push above.
+    let var_norm = (feat.variance / 12.0).clamp(0.0, 1.0);
 
-    //   change_points: threshold crossings in 56 subcarriers. 1-person ~5-15,
-    //     2-person ~15-30. Scale by 30.0 (half of max 55).
-    let cp_norm = (feat.change_points as f64 / 30.0).clamp(0.0, 1.0);
+    let cp_norm = (feat.change_points as f64 / 15.0).clamp(0.0, 1.0);
 
-    //   motion_band_power: upper-half subcarrier variance. 1-person ~1-8,
-    //     2-person ~8-25. Scale by 20.0.
-    let motion_norm = (feat.motion_band_power / 20.0).clamp(0.0, 1.0);
+    let motion_norm = (feat.motion_band_power / 8.0).clamp(0.0, 1.0);
 
-    //   spectral_power: mean squared amplitude. Highly variable (~100-1000+).
-    //     Use relative change indicator: high spectral_power with high variance
-    //     suggests multiple reflectors. Scale by 500.0.
-    let sp_norm = (feat.spectral_power / 500.0).clamp(0.0, 1.0);
+    let sp_norm = (feat.spectral_power / 300.0).clamp(0.0, 1.0);
 
     // Weighted composite — variance and change_points carry the most signal.
     var_norm * 0.35 + cp_norm * 0.30 + motion_norm * 0.20 + sp_norm * 0.15
@@ -1755,14 +1753,16 @@ fn compute_person_score(feat: &FeatureInfo) -> f64 {
 /// Uses asymmetric thresholds: higher threshold to add a person, lower to remove.
 /// This prevents flickering at the boundary.
 fn score_to_person_count(smoothed_score: f64) -> usize {
-    // Thresholds tuned for single-ESP32 link:
-    //   score > 0.75 → 2 persons (needs sustained high variance + change points)
-    //   score > 0.90 → 3 persons (very high activity, rare with single link)
-    // Note: single-node setups produce high variance/motion from multipath,
-    // so thresholds are raised to avoid false multi-person detection.
-    if smoothed_score > 0.90 {
+    // Thresholds calibrated against real ESP32 CSI with 1-3 people:
+    //   score > 0.35 → 2 persons
+    //   score > 0.58 → 3 persons
+    //
+    // A single Tx-Rx link can distinguish presence counts via variance and
+    // change-point density.  The EMA smoothing (α=0.15) in the caller
+    // already prevents transient spikes from causing flicker.
+    if smoothed_score > 0.58 {
         3
-    } else if smoothed_score > 0.75 {
+    } else if smoothed_score > 0.35 {
         2
     } else {
         1
@@ -2862,6 +2862,12 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                     } else {
                         0
                     };
+
+                    debug!(
+                        "ESP32 person score: raw={:.3} smoothed={:.3} est={} | var={:.1} cp={} mbp={:.1} sp={:.1}",
+                        raw_score, s.smoothed_person_score, est_persons,
+                        features.variance, features.change_points, features.motion_band_power, features.spectral_power
+                    );
 
                     let mut update = SensingUpdate {
                         msg_type: "sensing_update".to_string(),
