@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${IMAGE:-ruvnet/wifi-densepose:latest}"
+IMAGE="${IMAGE:-ruview-local:pi}"
 CONTAINER_NAME="${CONTAINER_NAME:-ruview-pi}"
 HTTP_PORT="${HTTP_PORT:-3000}"
 WS_PORT="${WS_PORT:-3001}"
@@ -9,6 +9,9 @@ UDP_PORT="${UDP_PORT:-5005}"
 CSI_SOURCE="${CSI_SOURCE:-esp32}"
 RESTART_POLICY="${RESTART_POLICY:-unless-stopped}"
 SENSING_BIND_ADDR="${SENSING_BIND_ADDR:-0.0.0.0}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+BUILD_LOCAL_IMAGE="${BUILD_LOCAL_IMAGE:-1}"
 
 usage() {
   cat <<EOF
@@ -18,7 +21,7 @@ Usage:
   $(basename "$0") [start|stop|restart|logs|status]
 
 Environment overrides:
-  IMAGE=ruvnet/wifi-densepose:latest
+  IMAGE=ruview-local:pi
   CONTAINER_NAME=ruview-pi
   HTTP_PORT=3000
   WS_PORT=3001
@@ -26,11 +29,13 @@ Environment overrides:
   CSI_SOURCE=esp32
   RESTART_POLICY=unless-stopped
   SENSING_BIND_ADDR=0.0.0.0
+  BUILD_LOCAL_IMAGE=1
 
 Examples:
   $(basename "$0") start
   HTTP_PORT=8080 $(basename "$0") start
   $(basename "$0") logs
+  BUILD_LOCAL_IMAGE=0 IMAGE=ruvnet/wifi-densepose:latest $(basename "$0") start
 EOF
 }
 
@@ -64,8 +69,13 @@ start_container() {
     docker rm "$CONTAINER_NAME" >/dev/null
   fi
 
-  echo "Pulling image: $IMAGE"
-  docker pull "$IMAGE"
+  if [[ "$BUILD_LOCAL_IMAGE" == "1" ]]; then
+    echo "Building local image from repo: $IMAGE"
+    docker build -t "$IMAGE" -f "${REPO_ROOT}/docker/Dockerfile.rust" "${REPO_ROOT}"
+  else
+    echo "Pulling image: $IMAGE"
+    docker pull "$IMAGE"
+  fi
 
   echo "Starting container '$CONTAINER_NAME'..."
   docker run -d \
@@ -127,6 +137,7 @@ print_status() {
   echo "Useful commands:"
   echo "  $(basename "$0") logs"
   echo "  curl http://localhost:${HTTP_PORT}/health"
+  echo "  curl -i -N -H 'Connection: Upgrade' -H 'Upgrade: websocket' http://localhost:${HTTP_PORT}/api/v1/stream/pose"
 }
 
 ACTION="${1:-start}"
