@@ -1271,7 +1271,7 @@ async fn windows_wifi_task(state: SharedState, tick_ms: u64) {
         let raw_score = compute_person_score(&features);
         s.smoothed_person_score = s.smoothed_person_score * 0.85 + raw_score * 0.15;
         let est_persons = if classification.presence {
-            score_to_person_count(s.smoothed_person_score)
+            estimate_person_count(&features, s.smoothed_person_score)
         } else {
             0
         };
@@ -1405,7 +1405,7 @@ async fn windows_wifi_fallback_tick(state: &SharedState, seq: u32) {
     let raw_score = compute_person_score(&features);
     s.smoothed_person_score = s.smoothed_person_score * 0.85 + raw_score * 0.15;
     let est_persons = if classification.presence {
-        score_to_person_count(s.smoothed_person_score)
+        estimate_person_count(&features, s.smoothed_person_score)
     } else {
         0
     };
@@ -1748,32 +1748,32 @@ fn compute_person_score(feat: &FeatureInfo) -> f64 {
     var_norm * 0.35 + cp_norm * 0.30 + motion_norm * 0.20 + sp_norm * 0.15
 }
 
-/// Convert smoothed person score to discrete count with hysteresis.
+/// Convert smoothed person score + supporting features into a discrete count.
 ///
-/// Uses asymmetric thresholds: higher threshold to add a person, lower to remove.
-/// This prevents flickering at the boundary.
-fn score_to_person_count(smoothed_score: f64) -> usize {
-    // Thresholds calibrated against real ESP32 CSI with 1-3 people:
-    //   score > 0.35 → 2 persons
-    //   score > 0.58 → 3 persons
-    //
-    // A single Tx-Rx link can distinguish presence counts via variance and
-    // change-point density.  The EMA smoothing (α=0.15) in the caller
-    // already prevents transient spikes from causing flicker.
-    if smoothed_score > 0.58 {
+/// The score-only thresholds were too eager and could jump to 3 from
+/// multipath-heavy single-person motion. We require multiple indicators to
+/// agree before escalating the estimate.
+fn estimate_person_count(feat: &FeatureInfo, smoothed_score: f64) -> usize {
+    let supports_two =
+        feat.variance > 8.0 &&
+        feat.change_points >= 10 &&
+        feat.motion_band_power > 2.5;
+
+    let supports_three =
+        feat.variance > 18.0 &&
+        feat.change_points >= 18 &&
+        feat.motion_band_power > 6.0 &&
+        feat.spectral_power > 180.0;
+
+    if smoothed_score > 0.78 && supports_three {
         3
-    } else if smoothed_score > 0.35 {
+    } else if smoothed_score > 0.50 && supports_two {
         2
     } else {
         1
     }
 }
 
-/// Apply a conservative topology gate to the heuristic person count.
-///
-/// Multi-person separation from WiFi CSI needs spatial diversity. With fewer
-/// than 3 ESP32 viewpoints, the variance-based heuristic can spike into false
-/// 2-3 person counts from multipath and self-motion, so we clamp to 1.
 /// Generate a single person's skeleton with per-person spatial offset and phase stagger.
 ///
 /// `person_idx`: 0-based index of this person.
@@ -2863,7 +2863,7 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                     let raw_score = compute_person_score(&features);
                     s.smoothed_person_score = s.smoothed_person_score * 0.85 + raw_score * 0.15;
                     let est_persons = if classification.presence {
-                        score_to_person_count(s.smoothed_person_score)
+                        estimate_person_count(&features, s.smoothed_person_score)
                     } else {
                         0
                     };
@@ -2995,7 +2995,7 @@ async fn simulated_data_task(state: SharedState, tick_ms: u64) {
         let raw_score = compute_person_score(&features);
         s.smoothed_person_score = s.smoothed_person_score * 0.85 + raw_score * 0.15;
         let est_persons = if classification.presence {
-            score_to_person_count(s.smoothed_person_score)
+            estimate_person_count(&features, s.smoothed_person_score)
         } else {
             0
         };
