@@ -1769,6 +1769,11 @@ fn score_to_person_count(smoothed_score: f64) -> usize {
     }
 }
 
+/// Apply a conservative topology gate to the heuristic person count.
+///
+/// Multi-person separation from WiFi CSI needs spatial diversity. With fewer
+/// than 3 ESP32 viewpoints, the variance-based heuristic can spike into false
+/// 2-3 person counts from multipath and self-motion, so we clamp to 1.
 /// Generate a single person's skeleton with per-person spatial offset and phase stagger.
 ///
 /// `person_idx`: 0-based index of this person.
@@ -2863,41 +2868,43 @@ async fn udp_receiver_task(state: SharedState, udp_port: u16) {
                         0
                     };
 
+                    let source = "esp32".to_string();
+                    let nodes = {
+                        // Update node registry with current frame
+                        let current_node = NodeInfo {
+                            node_id: frame.node_id,
+                            rssi_dbm: features.mean_rssi,
+                            position: [2.0, 0.0, 1.5],
+                            amplitude: frame.amplitudes.iter().take(56).cloned().collect(),
+                            subcarrier_count: frame.n_subcarriers as usize,
+                            ip: Some(src.ip().to_string()),
+                            channel: Some(frame.freq_mhz),
+                        };
+                        s.node_registry.insert(frame.node_id, TrackedNode {
+                            info: current_node,
+                            last_seen: std::time::Instant::now(),
+                        });
+                        // Evict stale nodes and collect all active ones
+                        let cutoff = std::time::Instant::now() - Duration::from_secs(NODE_STALE_SECS);
+                        s.node_registry.retain(|_, v| v.last_seen > cutoff);
+                        let mut nodes: Vec<NodeInfo> = s.node_registry.values()
+                            .map(|tn| tn.info.clone())
+                            .collect();
+                        nodes.sort_by_key(|n| n.node_id);
+                        nodes
+                    };
                     debug!(
-                        "ESP32 person score: raw={:.3} smoothed={:.3} est={} | var={:.1} cp={} mbp={:.1} sp={:.1}",
-                        raw_score, s.smoothed_person_score, est_persons,
+                        "ESP32 person score: raw={:.3} smoothed={:.3} est={} nodes={} | var={:.1} cp={} mbp={:.1} sp={:.1}",
+                        raw_score, s.smoothed_person_score, est_persons, nodes.len(),
                         features.variance, features.change_points, features.motion_band_power, features.spectral_power
                     );
 
                     let mut update = SensingUpdate {
                         msg_type: "sensing_update".to_string(),
                         timestamp: chrono::Utc::now().timestamp_millis() as f64 / 1000.0,
-                        source: "esp32".to_string(),
+                        source,
                         tick,
-                        nodes: {
-                            // Update node registry with current frame
-                            let current_node = NodeInfo {
-                                node_id: frame.node_id,
-                                rssi_dbm: features.mean_rssi,
-                                position: [2.0, 0.0, 1.5],
-                                amplitude: frame.amplitudes.iter().take(56).cloned().collect(),
-                                subcarrier_count: frame.n_subcarriers as usize,
-                                ip: Some(src.ip().to_string()),
-                                channel: Some(frame.freq_mhz),
-                            };
-                            s.node_registry.insert(frame.node_id, TrackedNode {
-                                info: current_node,
-                                last_seen: std::time::Instant::now(),
-                            });
-                            // Evict stale nodes and collect all active ones
-                            let cutoff = std::time::Instant::now() - Duration::from_secs(NODE_STALE_SECS);
-                            s.node_registry.retain(|_, v| v.last_seen > cutoff);
-                            let mut nodes: Vec<NodeInfo> = s.node_registry.values()
-                                .map(|tn| tn.info.clone())
-                                .collect();
-                            nodes.sort_by_key(|n| n.node_id);
-                            nodes
-                        },
+                        nodes,
                         features: features.clone(),
                         classification,
                         signal_field: generate_signal_field(

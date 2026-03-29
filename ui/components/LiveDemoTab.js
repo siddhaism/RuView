@@ -262,14 +262,14 @@ export class LiveDemoTab {
                     <span class="setup-level-icon">1x</span>
                     <div class="setup-level-info">
                       <strong>1 ESP32 + 1 AP</strong>
-                      <p>Presence, breathing, gross motion</p>
+                      <p>Presence, occupancy estimate, breathing, gross motion</p>
                     </div>
                   </div>
                   <div class="setup-level">
                     <span class="setup-level-icon">3x</span>
                     <div class="setup-level-info">
                       <strong>2-3 ESP32s</strong>
-                      <p>Body localization, motion direction</p>
+                      <p>More stable count, coarse localization, motion direction</p>
                     </div>
                   </div>
                   <div class="setup-level">
@@ -284,6 +284,7 @@ export class LiveDemoTab {
                   Signal-Derived mode uses aggregate CSI features.
                   For per-limb tracking, load a trained <code>.rvf</code> model
                   with <code>--model path.rvf</code> and use 4+ sensors.
+                  One ESP32 can detect presence and estimate occupancy, but exact headcount can drift in multipath-heavy rooms. Additional viewpoints improve count stability.
                 </p>
               </div>
 
