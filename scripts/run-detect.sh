@@ -8,6 +8,7 @@ WS_PORT="${WS_PORT:-3001}"
 UDP_PORT="${UDP_PORT:-5005}"
 CSI_SOURCE="${CSI_SOURCE:-esp32}"
 RESTART_POLICY="${RESTART_POLICY:-unless-stopped}"
+SENSING_BIND_ADDR="${SENSING_BIND_ADDR:-0.0.0.0}"
 
 usage() {
   cat <<EOF
@@ -24,6 +25,7 @@ Environment overrides:
   UDP_PORT=5005
   CSI_SOURCE=esp32
   RESTART_POLICY=unless-stopped
+  SENSING_BIND_ADDR=0.0.0.0
 
 Examples:
   $(basename "$0") start
@@ -54,30 +56,28 @@ container_running() {
 start_container() {
   require_cmd docker
 
-  if container_running; then
-    echo "Container '$CONTAINER_NAME' is already running."
-    print_status
-    return
-  fi
-
   if container_exists; then
-    echo "Starting existing container '$CONTAINER_NAME'..."
-    docker start "$CONTAINER_NAME" >/dev/null
-  else
-    echo "Pulling image: $IMAGE"
-    docker pull "$IMAGE"
-
-    echo "Starting container '$CONTAINER_NAME'..."
-    docker run -d \
-      --name "$CONTAINER_NAME" \
-      --restart "$RESTART_POLICY" \
-      -p "${HTTP_PORT}:3000" \
-      -p "${WS_PORT}:3001" \
-      -p "${UDP_PORT}:5005/udp" \
-      -e "CSI_SOURCE=${CSI_SOURCE}" \
-      -e "RUST_LOG=info" \
-      "$IMAGE" >/dev/null
+    echo "Removing existing container '$CONTAINER_NAME' so ports and env stay in sync..."
+    if container_running; then
+      docker stop "$CONTAINER_NAME" >/dev/null
+    fi
+    docker rm "$CONTAINER_NAME" >/dev/null
   fi
+
+  echo "Pulling image: $IMAGE"
+  docker pull "$IMAGE"
+
+  echo "Starting container '$CONTAINER_NAME'..."
+  docker run -d \
+    --name "$CONTAINER_NAME" \
+    --restart "$RESTART_POLICY" \
+    -p "${HTTP_PORT}:3000" \
+    -p "${WS_PORT}:3001" \
+    -p "${UDP_PORT}:5005/udp" \
+    -e "CSI_SOURCE=${CSI_SOURCE}" \
+    -e "SENSING_BIND_ADDR=${SENSING_BIND_ADDR}" \
+    -e "RUST_LOG=info" \
+    "$IMAGE" >/dev/null
 
   print_status
 }
@@ -115,11 +115,13 @@ print_status() {
   if [[ -n "${pi_ip:-}" ]]; then
     echo "  UI:         http://${pi_ip}:${HTTP_PORT}"
     echo "  Health:     http://${pi_ip}:${HTTP_PORT}/health"
-    echo "  WebSocket:  ws://${pi_ip}:${WS_PORT}/ws/sensing"
+    echo "  WebSocket:  ws://${pi_ip}:${HTTP_PORT}/ws/sensing"
+    echo "  Alt WS:     ws://${pi_ip}:${WS_PORT}/ws/sensing"
   else
     echo "  UI:         http://<pi-ip>:${HTTP_PORT}"
     echo "  Health:     http://<pi-ip>:${HTTP_PORT}/health"
-    echo "  WebSocket:  ws://<pi-ip>:${WS_PORT}/ws/sensing"
+    echo "  WebSocket:  ws://<pi-ip>:${HTTP_PORT}/ws/sensing"
+    echo "  Alt WS:     ws://<pi-ip>:${WS_PORT}/ws/sensing"
   fi
   echo
   echo "Useful commands:"
