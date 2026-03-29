@@ -33,6 +33,10 @@ COPY --from=builder /build/target/release/sensing-server /app/sensing-server
 # Copy UI assets
 COPY ui/ /app/ui/
 
+# Copy baked-in RVF models for the Model Control panel.
+# The sensing server scans /app/data/models at runtime.
+COPY rust-port/wifi-densepose-rs/data/models/ /app/data/models/
+
 # HTTP API
 EXPOSE 3000
 # WebSocket

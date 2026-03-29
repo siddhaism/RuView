@@ -12,6 +12,7 @@ SENSING_BIND_ADDR="${SENSING_BIND_ADDR:-0.0.0.0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_LOCAL_IMAGE="${BUILD_LOCAL_IMAGE:-1}"
+MODELS_SOURCE_DIR="${MODELS_SOURCE_DIR:-${REPO_ROOT}/rust-port/wifi-densepose-rs/data/models}"
 
 usage() {
   cat <<EOF
@@ -30,6 +31,7 @@ Environment overrides:
   RESTART_POLICY=unless-stopped
   SENSING_BIND_ADDR=0.0.0.0
   BUILD_LOCAL_IMAGE=1
+  MODELS_SOURCE_DIR=${REPO_ROOT}/rust-port/wifi-densepose-rs/data/models
 
 Examples:
   $(basename "$0") start
@@ -42,6 +44,13 @@ EOF
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+require_models_dir() {
+  if [[ ! -d "$MODELS_SOURCE_DIR" ]]; then
+    echo "Missing models directory: $MODELS_SOURCE_DIR" >&2
     exit 1
   fi
 }
@@ -70,6 +79,7 @@ start_container() {
   fi
 
   if [[ "$BUILD_LOCAL_IMAGE" == "1" ]]; then
+    require_models_dir
     echo "Building local image from repo: $IMAGE"
     docker build -t "$IMAGE" -f "${REPO_ROOT}/docker/Dockerfile.rust" "${REPO_ROOT}"
   else
@@ -120,6 +130,9 @@ print_status() {
   echo "Expected ESP32 setup:"
   echo "  Node 1 -> Pi UDP ${UDP_PORT}"
   echo "  Node 2 -> Pi UDP ${UDP_PORT}"
+  if [[ "$BUILD_LOCAL_IMAGE" == "1" ]]; then
+    echo "  Baked models: ${MODELS_SOURCE_DIR}"
+  fi
   echo
   echo "Endpoints:"
   if [[ -n "${pi_ip:-}" ]]; then
